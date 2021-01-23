@@ -20,9 +20,7 @@ class HumanoidAcfExtended {
         $this->db = new Database();
 
         /** Save ACF group of fields */
-        add_action('save_post_acf-field-group', array($this, 'saveFields'), 99, 2);
-        /** Called every time an acf field is saved in the group field edit view */
-        add_action('save_post_acf-field', array($this, 'saveField'), 99, 2);
+        add_action('acf/update_field_group', array($this, 'saveAcfGroupsFields'));
         /** Save ACF fields */
         add_action('acf/save_post', array($this, 'saveAcfData'), 5);
         /** Load ACF value */
@@ -31,45 +29,47 @@ class HumanoidAcfExtended {
 
     /**
      * This is called every time we create or update group of fields, once
-     * It's only purpose is to handle creation of custom tables if required
+     * It's purpose is to handle creation of custom tables if required and update all fields
      *
-     * TODO: For now, we don't need to delete tables. Maybe it's not something we should do
+     * TODO: For now, we don't need to delete tables / fields. Maybe it's not something we should do
      *
-     * @param $postID
-     * @param $post
+     * @param $group
      */
-    public function saveFields($postID, $post) {
+    public function saveAcfGroupsFields($group) {
         // Future table name
-        $postName = get_field_object($post->post_name);
+        $key = $group['key'];
 
-        // the table does not exists, create it
-        if (!$this->tableExists($postName)) {
-            $this->db->createTable($postName);
+        // the table does not exists, create it with default fields
+        if (!$this->tableExists($key)) {
+            $this->db->createTable($key);
+        }
+
+        echo '<pre>';
+
+        // Update fields individually
+        $fields = acf_get_fields($key);
+        foreach ($fields as $field) {
+            $this->saveField($field);
         }
     }
 
     /**
      * This hook is trigger for each ACF field change (except delete)
-     * If we have three field
      *
-     * @param $postID
-     * @param $post
+     * @param $field
      */
-    public function saveField($postID, $post) {
+    private function saveField($field) {
         // Get post parent name
-        $postParentId = $post->post_parent;
+        $postParentId = $field['parent'];
         $postParentName = $this->getACFGroupName($postParentId);
 
         // Be careful, if this is altered, the data could not been mapped
         // A manual migration will be required
         // (nota: this is how ACF works every time, even with the default configuration in meta table)
-        $fieldName = $post->post_excerpt;
-
-        // Contains everything we know about the field
-        $fieldInfo = unserialize($post->post_content);
+        $fieldName = $field['name'];
 
         // This is the main info which will drive the way we'll treat the field inside the custom table
-        $fieldType = $fieldInfo['type'];
+        $fieldType = $field['type'];
 
         // Check if custom table has this field
         if (!$this->columnExists($fieldName, $postParentName)) {
