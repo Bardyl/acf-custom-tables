@@ -30,9 +30,8 @@ class Database {
         $table = $wpdb->prefix . $table;
 
         $sql = "CREATE TABLE $table (
-            id mediumint(9) NOT NULL AUTO_INCREMENT,
             post_id mediumint(9) NOT NULL,
-            PRIMARY KEY (id),
+            PRIMARY KEY (post_id),
             UNIQUE (post_id)
         ) {$this->charsetCollate};";
 
