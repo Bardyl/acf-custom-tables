@@ -44,8 +44,6 @@ class HumanoidAcfExtended {
             $this->db->createTable($key);
         }
 
-        echo '<pre>';
-
         // Update fields individually
         $fields = acf_get_fields($key);
         foreach ($fields as $field) {
