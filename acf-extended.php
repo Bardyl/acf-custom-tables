@@ -92,7 +92,6 @@ class HumanoidAcfExtended {
         // A manual migration will be required
         // (nota: this is how ACF works every time, even with the default configuration in meta table)
         $fieldName = $field['name'];
-        var_dump($fieldName);
 
         // We want to manage carefully sub fields so we can show directly in the database (and parse them well too)
         // if they are sub (sub) fields of fields
@@ -125,7 +124,6 @@ class HumanoidAcfExtended {
      * @param $postID
      */
     public function saveAcfData($postID) {
-        echo '<pre>';
         $acfThings = $this->getAcfFieldsValues($_POST['acf']);
 
         // Update matching tables with new values
