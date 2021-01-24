@@ -142,14 +142,16 @@ class HumanoidAcfExtended {
     /**
      * Parse all acf fields recursively
      *
+     * TODO: $hierarchical issue when returning to parent field, not removing descendants
+     * TODO: With repeater fields, the last item is repeated in name
+     *
      * @param $fields
-     * @param array $values
      * @param array $hierarchical
      * @return array|mixed
      */
     private function getAcfFieldsValues($fields, $hierarchical = array()): array {
         $values = array();
-        foreach ($fields as $key => $value) {
+        foreach ($fields as $key => $field) {
             // Get field object to find the parent (for our custom table retrieve)
             if (substr($key, 0, 9) === 'row-field') {
                 $key = substr($key, 4);
@@ -165,13 +167,12 @@ class HumanoidAcfExtended {
             if (!empty($hierarchical)) {
                 $fullAcfFieldName = implode('_', $hierarchical) . '_' . $acfFieldName;
             }
-            $values[$acfGroup][$fullAcfFieldName] = $value;
 
-            if (is_array($value) && !empty($value)) {
-                $values[$acfGroup][$fullAcfFieldName] = null;
+            if (is_array($field) && !empty($field)) {
                 $hierarchical[] = $acfFieldName;
-
-                $values[$acfGroup][] = $this->getAcfFieldsValues($value, $hierarchical);
+                $values = array_merge_recursive($values, $this->getAcfFieldsValues($field, $hierarchical));
+            } else {
+                $values[$acfGroup][$fullAcfFieldName] = $field;
             }
         }
         return $values;
