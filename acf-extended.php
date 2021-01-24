@@ -20,7 +20,7 @@ class HumanoidAcfExtended {
         $this->db = new Database();
 
         /** Save ACF group of fields */
-        add_action('acf/update_field_group', array($this, 'saveAcfGroupsFields'));
+        add_action('acf/update_field_group', array($this, 'saveAcfGroupFields'));
         /** Save ACF fields */
         add_action('acf/save_post', array($this, 'saveAcfData'), 5);
         /** Load ACF value */
@@ -35,9 +35,7 @@ class HumanoidAcfExtended {
      *
      * @param $group
      */
-    public function saveAcfGroupsFields($group) {
-        echo '<pre>';
-
+    public function saveAcfGroupFields($group) {
         // Future table name
         $key = $group['key'];
 
@@ -116,15 +114,18 @@ class HumanoidAcfExtended {
     }
 
     /**
-     * Called every time a post is saved to save ACF custom fields not in the postmeta table
+     * Called every time a post is saved to save ACF custom fields not in the post meta table
      * but into our custom tables (one by group of fields)
      *
-     * TODO: make sure data is not also stored in postmeta table
+     * TODO: make sure data is not also stored in post meta table
      *
      * @param $postID
      */
     public function saveAcfData($postID) {
+        echo '<pre>';
         $acfThings = $this->getAcfFieldsValues($_POST['acf']);
+
+        var_dump($acfThings);
 
         // Update matching tables with new values
         // Existing rows are deleting and re-inserted
@@ -134,6 +135,8 @@ class HumanoidAcfExtended {
 
         // Unset to not save in post meta table
         unset($_POST['acf']);
+
+        die();
     }
 
     /**
@@ -144,9 +147,13 @@ class HumanoidAcfExtended {
      * @param array $hierarchical
      * @return array|mixed
      */
-    private function getAcfFieldsValues($fields, $values = array(), $hierarchical = array()): array {
+    private function getAcfFieldsValues($fields, $hierarchical = array()): array {
+        $values = array();
         foreach ($fields as $key => $value) {
             // Get field object to find the parent (for our custom table retrieve)
+            if (substr($key, 0, 9) === 'row-field') {
+                $key = substr($key, 4);
+            }
             $acfField = get_field_object($key, false, true, false);
             $acfFieldName = $acfField['name'];
 
@@ -164,7 +171,7 @@ class HumanoidAcfExtended {
                 $values[$acfGroup][$fullAcfFieldName] = null;
                 $hierarchical[] = $acfFieldName;
 
-                return $this->getAcfFieldsValues($value, $values, $hierarchical);
+                $values[$acfGroup][] = $this->getAcfFieldsValues($value, $hierarchical);
             }
         }
         return $values;
