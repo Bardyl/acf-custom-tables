@@ -123,6 +123,7 @@ class Database {
         global $wpdb;
         $table = $wpdb->prefix . $table;
         $values['post_id'] = $postID;
+        var_dump($values);
         $wpdb->replace($table, $values);
     }
 

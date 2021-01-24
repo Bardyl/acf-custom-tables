@@ -36,6 +36,8 @@ class HumanoidAcfExtended {
      * @param $group
      */
     public function saveAcfGroupsFields($group) {
+        echo '<pre>';
+
         // Future table name
         $key = $group['key'];
 
@@ -47,7 +49,32 @@ class HumanoidAcfExtended {
         // Update fields individually
         $fields = acf_get_fields($key);
         foreach ($fields as $field) {
+            // First, save field…
             $this->saveField($field);
+            // And then, handle sub fields recursively
+            if (isset($field['sub_fields'])) {
+                $this->saveSubFields($field['sub_fields'], array($field['name']));
+            }
+        }
+    }
+
+    /**
+     * Recursive function to manage fields subfields on multiple level
+     * ACF has no limitation on this
+     *
+     * @param $fields
+     * @param $hierarchical
+     */
+    private function saveSubFields($fields, $hierarchical) {
+        // Parse all sub fields recursively
+        foreach ($fields as $field) {
+            // And for each of them, save it before checking if it has subfields itself
+            // and doing this all over again
+            $this->saveField($field, $hierarchical);
+            if (isset($field['sub_fields'])) {
+                $hierarchical[] = $field['name'];
+                $this->saveSubFields($field['sub_fields'], $hierarchical);
+            }
         }
     }
 
@@ -55,16 +82,24 @@ class HumanoidAcfExtended {
      * This hook is trigger for each ACF field change (except delete)
      *
      * @param $field
+     * @param array $hierarchical
      */
-    private function saveField($field) {
+    private function saveField($field, $hierarchical = array()) {
         // Get post parent name
-        $postParentId = $field['parent'];
-        $postParentName = $this->getACFGroupName($postParentId);
+        $postParentName = $this->getACFGroupName($field['id']);
 
         // Be careful, if this is altered, the data could not been mapped
         // A manual migration will be required
         // (nota: this is how ACF works every time, even with the default configuration in meta table)
         $fieldName = $field['name'];
+        var_dump($fieldName);
+
+        // We want to manage carefully sub fields so we can show directly in the database (and parse them well too)
+        // if they are sub (sub) fields of fields
+        // So, we store them in database with parent_[parent_]field_name
+        if (!empty($hierarchical)) {
+            $fieldName = implode('_', $hierarchical) . '_' . $fieldName;
+        }
 
         // This is the main info which will drive the way we'll treat the field inside the custom table
         $fieldType = $field['type'];
@@ -90,26 +125,48 @@ class HumanoidAcfExtended {
      * @param $postID
      */
     public function saveAcfData($postID) {
-        $acfThings = array();
-
-        // Parse all acf fields
-        foreach ($_POST['acf'] as $key => $value) {
-            // Get field object to find the parent (for our custom table retrieve)
-            $acfField = get_field_object($key);
-            $acfFieldName = $acfField['name'];
-
-            // Get SQL table name
-            $acfGroup = $this->getACFGroupName($acfField['parent']);
-
-            // Update
-            $acfThings[$acfGroup][$acfFieldName] = $value;
-        }
+        echo '<pre>';
+        $acfThings = $this->getAcfFieldsValues($_POST['acf']);
 
         // Update matching tables with new values
         // Existing rows are deleting and re-inserted
         foreach ($acfThings as $table => $group) {
             $this->db->insertOrUpdateRow($table, $postID, $group);
         }
+
+        // Unset to not save in post meta table
+        unset($_POST['acf']);
+    }
+
+    /**
+     * Parse all acf fields recursively
+     *
+     * @param $fields
+     */
+    private function getAcfFieldsValues($fields, $values = array(), $hierarchical = array()) {
+        foreach ($fields as $key => $value) {
+            // Get field object to find the parent (for our custom table retrieve)
+            $acfField = get_field_object($key, false, true, false);
+            $acfFieldName = $acfField['name'];
+
+            // Get SQL table name
+            $acfGroup = $this->getACFGroupName($acfField['id']);
+
+            // Update
+            $fullAcfFieldName = $acfFieldName;
+            if (!empty($hierarchical)) {
+                $fullAcfFieldName = implode('_', $hierarchical) . '_' . $acfFieldName;
+            }
+            $values[$acfGroup][$fullAcfFieldName] = $value;
+
+            if (is_array($value) && !empty($value)) {
+                $values[$acfGroup][$fullAcfFieldName] = null;
+                $hierarchical[] = $acfFieldName;
+
+                return $this->getAcfFieldsValues($value, $values, $hierarchical);
+            }
+        }
+        return $values;
     }
 
     /**
@@ -120,12 +177,56 @@ class HumanoidAcfExtended {
      * @param $value
      * @param $postID
      * @param $field
-     * @return string
+     * @return string|array
      */
-    public function loadACFValue($value, $postID, $field): string {
-        $table = $this->getACFGroupName($field['parent']);
-        $column = $field['name'];
-        return $this->db->getSingleRowValue($table, $column, $postID);
+    public function loadACFValue($value, $postID, $field) {
+        // If no sub fields, that's easy, simply get the value inside our custom table
+        if (!isset($field['sub_fields'])) {
+            $table = $this->getACFGroupName($field['id']);
+            $column = $field['name'];
+            return $this->db->getSingleRowValue($table, $column, $postID);
+        }
+
+        // For fields with sub items, we must render the tree of all contained values with their field tree keys
+        // We're making this in a custom function to handle this recursively
+        return $this->loadSubAcfValues($field, $postID);
+    }
+
+    /**
+     * Recursive function to get sub (sub*) fields if necessary
+     *
+     * @param $field
+     * @param $postID
+     * @param string $parentColumns
+     * @return array
+     */
+    private function loadSubAcfValues($field, $postID, $parentColumns = ''): array {
+        $data = array();
+
+        // Check if subfields exists
+        // (for first level, this is redundant because we test it on main call)
+        if (isset($field['sub_fields'])) {
+            // Build parent columns variable to get the column name properly
+            // Remember that the column name is named after their parents groups field
+            if ($parentColumns === '') {
+                $parentColumns = $field['name'];
+            } else {
+                $parentColumns = $parentColumns . '_' . $field['name'];
+            }
+
+            // Parse every subfield and get the single field value or re-run the function for sub fields recursively
+            foreach ($field['sub_fields'] as $subField) {
+                $table = $this->getACFGroupName($subField['id']);
+                $column = $parentColumns . '_' . $subField['name'];
+
+                if (isset($subField['sub_fields'])) {
+                    $data[$subField['key']] = $this->loadSubAcfValues($subField, $postID, $parentColumns);
+                } else {
+                    $data[$subField['key']] = $this->db->getSingleRowValue($table, $column, $postID);
+                }
+            }
+        }
+        return $data;
     }
 
     /**
@@ -151,7 +252,10 @@ class HumanoidAcfExtended {
      */
     private function getACFGroupName($id) {
         global $wpdb;
-        $groupName = $wpdb->get_var("SELECT post_name FROM {$wpdb->posts} WHERE id = {$id};");
+        $fieldGroup = acf_get_field_group($id);
+        $fieldId = $fieldGroup['ID'];
+
+        $groupName = $wpdb->get_var("SELECT post_name FROM {$wpdb->posts} WHERE id = {$fieldId};");
         if ($groupName) {
             return $groupName;
         }
