@@ -140,8 +140,11 @@ class HumanoidAcfExtended {
      * Parse all acf fields recursively
      *
      * @param $fields
+     * @param array $values
+     * @param array $hierarchical
+     * @return array|mixed
      */
-    private function getAcfFieldsValues($fields, $values = array(), $hierarchical = array()) {
+    private function getAcfFieldsValues($fields, $values = array(), $hierarchical = array()): array {
         foreach ($fields as $key => $value) {
             // Get field object to find the parent (for our custom table retrieve)
             $acfField = get_field_object($key, false, true, false);
