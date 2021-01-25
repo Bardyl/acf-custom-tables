@@ -122,10 +122,7 @@ class HumanoidAcfExtended {
      * @param $postID
      */
     public function saveAcfData($postID) {
-        echo '<pre>';
         $acfThings = $this->getAcfFieldsValues($_POST['acf']);
-
-        var_dump($acfThings);
 
         // Update matching tables with new values
         // Existing rows are deleting and re-inserted
@@ -135,8 +132,41 @@ class HumanoidAcfExtended {
 
         // Unset to not save in post meta table
         unset($_POST['acf']);
+    }
 
-        die();
+    private function getAcfFieldsValues($fields, $values = array()) {
+        if (!empty($fields)) {
+            foreach ($fields as $key => $value) {
+                // If it's a value, then simply retrieve the field in database to add it
+                // If it's an array, we'll need to parse it to determine which type of complex
+                // field we're dealing with
+                $field = get_field_object($key, false, true, false);
+                $table = $this->getACFGroupName($field['id']);
+                $hierarchy = $this->getHierarchicalFieldName($field);
+
+                if (is_array($value)) {
+                    return $this->getAcfFieldsValues($value, $values);
+                } else {
+                    $hierarchy .= '_' . $field['name'];
+                    if ($hierarchy !== '' && $hierarchy[0] === '_') {
+                        $hierarchy = substr($hierarchy, 1);
+                    }
+                    $values[$table][$hierarchy] = $value;
+                }
+            }
+        }
+        return $values;
+    }
+
+    private function getHierarchicalFieldName($field) {
+        $hierarchy = '';
+        if (isset($field['parent'])) {
+            $parentField = acf_get_field($field['parent']);
+            if ($parentField !== false) {
+                $hierarchy .= $this->getHierarchicalFieldName($parentField) . '_' . $parentField['name'];
+            }
+        }
+        return $hierarchy;
     }
 
     /**
@@ -149,7 +179,7 @@ class HumanoidAcfExtended {
      * @param array $hierarchical
      * @return array|mixed
      */
-    private function getAcfFieldsValues($fields, $hierarchical = array()): array {
+    private function getAcfFieldsValuesOld($fields, $hierarchical = array()): array {
         $values = array();
         foreach ($fields as $key => $field) {
             // Get field object to find the parent (for our custom table retrieve)
