@@ -101,6 +101,14 @@ class HumanoidAcfExtended {
         // This is the main info which will drive the way we'll treat the field inside the custom table
         $fieldType = $field['type'];
 
+        // But we have to check if parent is a repeater field
+        // Repeater fields contains complex data and can't be handled with simple types
+        // We store json in it, and we need place, so use everytime a repeater field
+        $parentFieldType = $this->getACFGroupType($field['parent']);
+        if ($parentFieldType === 'repeater') {
+            $fieldType = $parentFieldType;
+        }
+
         // Check if custom table has this field
         if (!$this->columnExists($fieldName, $postParentName)) {
             // Field does not exists, create it
@@ -134,23 +142,55 @@ class HumanoidAcfExtended {
         unset($_POST['acf']);
     }
 
-    private function getAcfFieldsValues($fields, $values = array()) {
+    private function getAcfFieldsValues($fields) {
+        $values = array();
         if (!empty($fields)) {
             foreach ($fields as $key => $value) {
-                // If it's a value, then simply retrieve the field in database to add it
-                // If it's an array, we'll need to parse it to determine which type of complex
-                // field we're dealing with
                 $field = get_field_object($key, false, true, false);
                 $table = $this->getACFGroupName($field['id']);
-                $hierarchy = $this->getHierarchicalFieldName($field);
 
-                if (is_array($value)) {
-                    return $this->getAcfFieldsValues($value, $values);
-                } else {
-                    $hierarchy .= '_' . $field['name'];
-                    if ($hierarchy !== '' && $hierarchy[0] === '_') {
-                        $hierarchy = substr($hierarchy, 1);
+                // Build hierarchical name of field to get the column field in database
+                $hierarchy = $this->getHierarchicalFieldName($field);
+                $hierarchy .= '_' . $field['name'];
+                if ($hierarchy !== '' && $hierarchy[0] === '_') {
+                    $hierarchy = substr($hierarchy, 1);
+                }
+
+                // ! Tricky part
+                if ($field['type'] === 'repeater') {
+                    // If it's a repeater field, we need to parse it
+                    // to get values and place it at right places
+
+                    // This will act as a temporary array before we plate it's values
+                    $repeaterValues = array();
+                    // We parse each row ($i will act as a pointer for the item number
+                    $i = 0;
+                    foreach ($value as $row) {
+                        // And finally, parse every value in each row to get it's value and save it in the right place
+                        foreach ($row as $itemKey => $itemValue) {
+                            $itemObject = get_field_object($itemKey, false, true, false);
+                            $itemName = $itemObject['name'];
+                            $repeaterValues[$hierarchy . '_' . $itemName][] = array(
+                                'id' => $i,
+                                'value' => $itemValue
+                            );
+                        }
+                        $i++;
                     }
+
+                    // Now, transform the values to be handled in a database save
+                    foreach ($repeaterValues as $repeaterKey => $repeaterValue) {
+                       $values[$table][$repeaterKey] = json_encode($repeaterValue);
+                    }
+                }
+                else if (is_array($value)) {
+                    // If it's an array, we'll need to parse it to determine which type of complex
+                    // field we're dealing with
+                    // This is a recursive loop
+                    $values = array_merge_recursive($values, $this->getAcfFieldsValues($value));
+                } else {
+                    // The easy part is if if it's a value:
+                    // retrieve the field in database to add it
                     $values[$table][$hierarchy] = $value;
                 }
             }
@@ -301,6 +341,15 @@ class HumanoidAcfExtended {
         return false;
     }
 
+    private function getACFGroupType($id) {
+        $field = acf_get_field($id);
+
+        if ($field) {
+            return $field['type'];
+        }
+        return false;
+    }
+
     /**
      * Create custom table to handle a new group of ACF fields
      *
@@ -354,6 +403,8 @@ class HumanoidAcfExtended {
                 return 'INT';
             case 'textarea':
                 return 'TEXT';
+            case 'repeater':
+                return 'LONGTEXT';
             default:
                 return 'VARCHAR(255)';
         }
