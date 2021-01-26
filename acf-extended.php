@@ -139,7 +139,6 @@ class HumanoidAcfExtended {
         }
 
         // Unset to not save in post meta table
-        unset($_POST['acf']);
     }
 
     private function getAcfFieldsValues($fields) {
@@ -171,7 +170,9 @@ class HumanoidAcfExtended {
                             $itemObject = get_field_object($itemKey, false, true, false);
                             $itemName = $itemObject['name'];
                             $repeaterValues[$hierarchy . '_' . $itemName][] = array(
-                                'id' => $i,
+                                'id' => 'row-' . $i,
+                                'key' => $itemObject['key'],
+                                'name' => $itemObject['name'],
                                 'value' => $itemValue
                             );
                         }
@@ -210,45 +211,6 @@ class HumanoidAcfExtended {
     }
 
     /**
-     * Parse all acf fields recursively
-     *
-     * TODO: $hierarchical issue when returning to parent field, not removing descendants
-     * TODO: With repeater fields, the last item is repeated in name
-     *
-     * @param $fields
-     * @param array $hierarchical
-     * @return array|mixed
-     */
-    private function getAcfFieldsValuesOld($fields, $hierarchical = array()): array {
-        $values = array();
-        foreach ($fields as $key => $field) {
-            // Get field object to find the parent (for our custom table retrieve)
-            if (substr($key, 0, 9) === 'row-field') {
-                $key = substr($key, 4);
-            }
-            $acfField = get_field_object($key, false, true, false);
-            $acfFieldName = $acfField['name'];
-
-            // Get SQL table name
-            $acfGroup = $this->getACFGroupName($acfField['id']);
-
-            // Update
-            $fullAcfFieldName = $acfFieldName;
-            if (!empty($hierarchical)) {
-                $fullAcfFieldName = implode('_', $hierarchical) . '_' . $acfFieldName;
-            }
-
-            if (is_array($field) && !empty($field)) {
-                $hierarchical[] = $acfFieldName;
-                $values = array_merge_recursive($values, $this->getAcfFieldsValues($field, $hierarchical));
-            } else {
-                $values[$acfGroup][$fullAcfFieldName] = $field;
-            }
-        }
-        return $values;
-    }
-
-    /**
      * Only use this in admin area because it's not optimized. The function
      * is called for every row with one sql query by field
      * It loads data from custom table instead of loading them from post meta default table
@@ -263,7 +225,53 @@ class HumanoidAcfExtended {
         if (!isset($field['sub_fields'])) {
             $table = $this->getACFGroupName($field['id']);
             $column = $field['name'];
-            return $this->db->getSingleRowValue($table, $column, $postID);
+
+            // TODO: clean code
+            // TODO: only work with one level under repeater field
+            // Get parent field to check if it's a repeater field
+            // Only work on one level, be careful
+            $parentField = acf_get_field($field['parent']);
+            if ($parentField['type'] === 'repeater') {
+                // fields names are composed like this: parent_iteration_subfield (e.g. faq_2_question)
+                // So we need to get the second and last part (iteration and value) to parse properly data from database
+                $repeater = str_replace($parentField['name'] . '_', '', $column);
+                $repeater = explode('_', $repeater, 2);
+                $repeaterIteration = $repeater[0];
+                $repeaterItem = $repeater[1];
+
+                // Get column value in database
+                // Sad but I don't think we could optimize this because of one query for each value… (maybe wordpress is caching it)
+                $json = $this->db->getSingleRowValue($table, $parentField['name'] . '_' . $repeaterItem, $postID);
+
+                // Parse json and return value
+                $data = json_decode($json, true);
+                return $data[$repeaterIteration]['value'];
+            } else {
+                // Easy way
+                return $this->db->getSingleRowValue($table, $column, $postID);
+            }
+        }
+
+        // TODO: clean code
+        // TODO: only work with repeater on one level
+        if ($field['type'] === 'repeater') {
+            // Get table name
+            $table = $this->getACFGroupName($field['id']);
+            $fieldData = array();
+            // Parse all sub fields in our repeater and get the value in database
+            foreach ($field['sub_fields'] as $row) {
+                $column = $field['name'] . '_' . $row['name'];
+                $json = $this->db->getSingleRowValue($table, $column, $postID);
+                $data = json_decode($json, true);
+
+                // Now, build the array like ACF want us to return it and returns it
+                $i = 0;
+                foreach ($data as $item) {
+                    $fieldData[$i][$item['key']] = $item['value'];
+                    $i++;
+                }
+            }
+            return $fieldData;
         }
 
         // For fields with sub items, we must render the tree of all contained values with their field tree keys
