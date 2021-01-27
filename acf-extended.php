@@ -147,6 +147,9 @@ class HumanoidAcfExtended {
         if (!empty($fields)) {
             foreach ($fields as $key => $value) {
                 $field = get_field_object($key, false, true, false);
+                if (!$field) {
+                   continue;
+                }
                 $table = $this->getACFGroupName($field['id']);
 
                 // Build hierarchical name of field to get the column field in database
@@ -186,6 +189,12 @@ class HumanoidAcfExtended {
                     }
                 } else if ($field['type'] === 'gallery') {
                     $values[$table][$hierarchy] = json_encode($value);
+                } else if ($field['type'] === 'post_object') {
+                    if (is_array($value)) {
+                        $values[$table][$hierarchy] = json_encode($value);
+                    } else {
+                        $values[$table][$hierarchy] = $value;
+                    }
                 } else if (is_array($value)) {
                     // If it's an array, we'll need to parse it to determine which type of complex
                     // field we're dealing with
@@ -253,7 +262,17 @@ class HumanoidAcfExtended {
                 $column = $field['name'];
                 $json = $this->db->getSingleRowValue($table, $column, $postID);
                 return json_decode($json, true);
-            } else {
+            } else if ($field['type'] === 'post_object') {
+                $table = $this->getACFGroupName($field['id']);
+                $column = $field['name'];
+                $json = $this->db->getSingleRowValue($table, $column, $postID);
+                $data = json_decode($json);
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    return $data;
+                }
+                return $json;
+            }
+            else {
                 // Easy way
                 return $this->db->getSingleRowValue($table, $column, $postID);
             }
