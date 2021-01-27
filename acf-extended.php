@@ -231,7 +231,7 @@ class HumanoidAcfExtended {
             // Get parent field to check if it's a repeater field
             // Only work on one level, be careful
             $parentField = acf_get_field($field['parent']);
-            if ($parentField['type'] === 'repeater') {
+            if ($parentField && $parentField['type'] === 'repeater') {
                 // fields names are composed like this: parent_iteration_subfield (e.g. faq_2_question)
                 // So we need to get the second and last part (iteration and value) to parse properly data from database
                 $repeater = str_replace($parentField['name'] . '_', '', $column);
