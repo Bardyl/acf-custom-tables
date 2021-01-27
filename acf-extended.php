@@ -8,9 +8,16 @@
 
 namespace AcfExtended;
 
+use AcfExtended\Core\Fields\Field;
+use AcfExtended\Core\Fields\Gallery;
+use AcfExtended\Core\Fields\PostObject;
+use AcfExtended\Core\Fields\Repeater;
+use AcfExtended\Core\Utils\ACF;
+use AcfExtended\Core\Utils\Database;
+
 define('HUMANOID_ACF_EXTENDED_PATH', __DIR__);
 
-require_once 'Database.php';
+require_once 'vendor/autoload.php';
 
 class HumanoidAcfExtended {
     private Database $db;
@@ -84,7 +91,7 @@ class HumanoidAcfExtended {
      */
     private function saveField($field, $hierarchical = array()) {
         // Get post parent name
-        $postParentName = $this->getACFGroupName($field['id']);
+        $postParentName = ACF::getACFGroupName($field['id']);
 
         // Be careful, if this is altered, the data could not been mapped
         // A manual migration will be required
@@ -150,7 +157,7 @@ class HumanoidAcfExtended {
                 if (!$field) {
                    continue;
                 }
-                $table = $this->getACFGroupName($field['id']);
+                $table = ACF::getACFGroupName($field['id']);
 
                 // Build hierarchical name of field to get the column field in database
                 $hierarchy = $this->getHierarchicalFieldName($field);
@@ -188,13 +195,9 @@ class HumanoidAcfExtended {
                        $values[$table][$repeaterKey] = json_encode($repeaterValue);
                     }
                 } else if ($field['type'] === 'gallery') {
-                    $values[$table][$hierarchy] = json_encode($value);
+                    $values[$table][$hierarchy] = (new Gallery())->formatForSave($value);
                 } else if ($field['type'] === 'post_object') {
-                    if (is_array($value)) {
-                        $values[$table][$hierarchy] = json_encode($value);
-                    } else {
-                        $values[$table][$hierarchy] = $value;
-                    }
+                    $values[$table][$hierarchy] = (new PostObject())->formatForSave($value);
                 } else if (is_array($value)) {
                     // If it's an array, we'll need to parse it to determine which type of complex
                     // field we're dealing with
@@ -234,47 +237,20 @@ class HumanoidAcfExtended {
     public function loadACFValue($value, $postID, $field) {
         // If no sub fields, that's easy, simply get the value inside our custom table
         if (!isset($field['sub_fields'])) {
-            $table = $this->getACFGroupName($field['id']);
-            $column = $field['name'];
-
             // TODO: clean code
             // TODO: only work with one level under repeater field
             // Get parent field to check if it's a repeater field
             // Only work on one level, be careful
             $parentField = acf_get_field($field['parent']);
             if ($parentField && $parentField['type'] === 'repeater') {
-                // fields names are composed like this: parent_iteration_subfield (e.g. faq_2_question)
-                // So we need to get the second and last part (iteration and value) to parse properly data from database
-                $repeater = str_replace($parentField['name'] . '_', '', $column);
-                $repeater = explode('_', $repeater, 2);
-                $repeaterIteration = $repeater[0];
-                $repeaterItem = $repeater[1];
-
-                // Get column value in database
-                // Sad but I don't think we could optimize this because of one query for each value… (maybe wordpress is caching it)
-                $json = $this->db->getSingleRowValue($table, $parentField['name'] . '_' . $repeaterItem, $postID);
-
-                // Parse json and return value
-                $data = json_decode($json, true);
-                return $data[$repeaterIteration]['value'];
+                return (new Repeater())->formatForLoad($field, $postID);
             } else if ($field['type'] === 'gallery') {
-                $table = $this->getACFGroupName($field['id']);
-                $column = $field['name'];
-                $json = $this->db->getSingleRowValue($table, $column, $postID);
-                return json_decode($json, true);
+                return (new Gallery())->formatForLoad($field, $postID);
             } else if ($field['type'] === 'post_object') {
-                $table = $this->getACFGroupName($field['id']);
-                $column = $field['name'];
-                $json = $this->db->getSingleRowValue($table, $column, $postID);
-                $data = json_decode($json);
-                if (json_last_error() === JSON_ERROR_NONE) {
-                    return $data;
-                }
-                return $json;
-            }
-            else {
+                return (new PostObject())->formatForLoad($field, $postID);
+            } else {
                 // Easy way
-                return $this->db->getSingleRowValue($table, $column, $postID);
+                return (new Field())->formatForLoad($field, $postID);
             }
         }
 
@@ -282,7 +258,7 @@ class HumanoidAcfExtended {
         // TODO: only work with repeater on one level
         if ($field['type'] === 'repeater') {
             // Get table name
-            $table = $this->getACFGroupName($field['id']);
+            $table = ACF::getACFGroupName($field['id']);
             $fieldData = array();
             // Parse all sub fields in our repeater and get the value in database
             foreach ($field['sub_fields'] as $row) {
@@ -329,7 +305,7 @@ class HumanoidAcfExtended {
 
             // Parse every subfield and get the single field value or re-run the function for sub fields recursively
             foreach ($field['sub_fields'] as $subField) {
-                $table = $this->getACFGroupName($subField['id']);
+                $table = ACF::getACFGroupName($subField['id']);
                 $column = $parentColumns . '_' . $subField['name'];
 
                 if (isset($subField['sub_fields'])) {
@@ -355,22 +331,6 @@ class HumanoidAcfExtended {
             if ($table[0] === $tableName) {
                 return true;
             }
-        }
-        return false;
-    }
-
-    /**
-     * @param $id
-     * @return string|bool
-     */
-    private function getACFGroupName($id) {
-        global $wpdb;
-        $fieldGroup = acf_get_field_group($id);
-        $fieldId = $fieldGroup['ID'];
-
-        $groupName = $wpdb->get_var("SELECT post_name FROM {$wpdb->posts} WHERE id = {$fieldId};");
-        if ($groupName) {
-            return $groupName;
         }
         return false;
     }

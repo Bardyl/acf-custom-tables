@@ -1,6 +1,6 @@
 <?php
 
-namespace AcfExtended;
+namespace AcfExtended\Core\Utils;
 
 /**
  * Interface between our ACF new database scheme implementation and $wpdb

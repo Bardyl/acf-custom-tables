@@ -1,0 +1,10 @@
+{
+  "name": "acf-extended",
+  "type": "wordpress-plugin",
+  "version": "1.0",
+  "autoload": {
+    "psr-4": {
+      "AcfExtended\\": "includes/"
+    }
+  }
+}
