@@ -183,8 +183,7 @@ class HumanoidAcfExtended {
                     foreach ($repeaterValues as $repeaterKey => $repeaterValue) {
                        $values[$table][$repeaterKey] = json_encode($repeaterValue);
                     }
-                }
-                else if (is_array($value)) {
+                } else if (is_array($value)) {
                     // If it's an array, we'll need to parse it to determine which type of complex
                     // field we're dealing with
                     // This is a recursive loop
@@ -408,6 +407,7 @@ class HumanoidAcfExtended {
     private function getTypeFromACFType($acfType): string {
         switch ($acfType) {
             case 'number':
+            case 'image':
                 return 'INT';
             case 'textarea':
                 return 'TEXT';
