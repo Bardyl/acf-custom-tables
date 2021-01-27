@@ -139,6 +139,7 @@ class HumanoidAcfExtended {
         }
 
         // Unset to not save in post meta table
+        unset($_POST['acf']);
     }
 
     private function getAcfFieldsValues($fields) {
@@ -183,6 +184,8 @@ class HumanoidAcfExtended {
                     foreach ($repeaterValues as $repeaterKey => $repeaterValue) {
                        $values[$table][$repeaterKey] = json_encode($repeaterValue);
                     }
+                } else if ($field['type'] === 'gallery') {
+                    $values[$table][$hierarchy] = json_encode($value);
                 } else if (is_array($value)) {
                     // If it's an array, we'll need to parse it to determine which type of complex
                     // field we're dealing with
@@ -245,6 +248,11 @@ class HumanoidAcfExtended {
                 // Parse json and return value
                 $data = json_decode($json, true);
                 return $data[$repeaterIteration]['value'];
+            } else if ($field['type'] === 'gallery') {
+                $table = $this->getACFGroupName($field['id']);
+                $column = $field['name'];
+                $json = $this->db->getSingleRowValue($table, $column, $postID);
+                return json_decode($json, true);
             } else {
                 // Easy way
                 return $this->db->getSingleRowValue($table, $column, $postID);
