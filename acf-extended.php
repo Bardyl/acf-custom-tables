@@ -12,6 +12,7 @@ use AcfExtended\Core\Fields\Field;
 use AcfExtended\Core\Fields\Gallery;
 use AcfExtended\Core\Fields\PostObject;
 use AcfExtended\Core\Fields\Repeater;
+use AcfExtended\Core\Fields\Text;
 use AcfExtended\Core\Utils\ACF;
 use AcfExtended\Core\Utils\Database;
 
@@ -21,10 +22,13 @@ require_once 'vendor/autoload.php';
 
 class HumanoidAcfExtended {
     private Database $db;
+    private array $supportedTypes;
 
     public function __construct() {
         // Initialize database interface to manage our custom SQL tables
         $this->db = new Database();
+
+        $this->initFieldsTypes();
 
         /** ACF group of fields admin page */
         add_action('acf/field_group/admin_head', array($this, 'addMetaBox'));
@@ -34,6 +38,22 @@ class HumanoidAcfExtended {
         add_action('acf/save_post', array($this, 'saveAcfData'), 5);
         /** Load ACF value */
         add_filter('acf/load_value', array($this, 'loadACFValue'), 99, 3);
+    }
+
+    private function initFieldsTypes() {
+        $fieldsFiles = scandir(HUMANOID_ACF_EXTENDED_PATH . '/includes/Core/Fields/');
+        foreach($fieldsFiles as $file) {
+            if (in_array($file, array('.', '..', 'Field.php'))) {
+                continue;
+            }
+
+            $fileName = explode('.', $file);
+            $fileName = $fileName[0];
+            $this->supportedTypes[] = strtolower($fileName);
+
+            $class = "\\AcfExtended\\Core\\Fields\\" . $fileName;
+            new $class();
+        }
     }
 
     /**
@@ -140,7 +160,10 @@ class HumanoidAcfExtended {
         $fieldType = $field['type'];
 
         // Get default value for each new entry
-        $fieldDefault = $field['default_value'];
+        $fieldDefault = null;
+        if (isset($field['default_value']) && !empty($field['default_value'])) {
+            $fieldDefault = $field['default_value'];
+        }
 
         // But we have to check if parent is a repeater field
         // Repeater fields contains complex data and can't be handled with simple types
@@ -191,7 +214,12 @@ class HumanoidAcfExtended {
                 if (!$field) {
                    continue;
                 }
+
+                // Get table name and initialize our final array table if not already done yet
                 $table = ACF::getACFGroupName($field['id']);
+                if (!isset($values[$table])) {
+                    $values[$table] = array();
+                }
 
                 // Build hierarchical name of field to get the column field in database
                 $hierarchy = $this->getHierarchicalFieldName($field);
@@ -200,38 +228,15 @@ class HumanoidAcfExtended {
                     $hierarchy = substr($hierarchy, 1);
                 }
 
-                // ! Tricky part
-                if ($field['type'] === 'repeater') {
-                    // If it's a repeater field, we need to parse it
-                    // to get values and place it at right places
-
-                    // This will act as a temporary array before we plate it's values
-                    $repeaterValues = array();
-                    // We parse each row ($i will act as a pointer for the item number
-                    $i = 0;
-                    foreach ($value as $row) {
-                        // And finally, parse every value in each row to get it's value and save it in the right place
-                        foreach ($row as $itemKey => $itemValue) {
-                            $itemObject = get_field_object($itemKey, false, true, false);
-                            $itemName = $itemObject['name'];
-                            $repeaterValues[$hierarchy . '_' . $itemName][] = array(
-                                'id' => 'row-' . $i,
-                                'key' => $itemObject['key'],
-                                'name' => $itemObject['name'],
-                                'value' => $itemValue
-                            );
-                        }
-                        $i++;
+                if (in_array($field['type'], $this->supportedTypes)) {
+                    $data = apply_filters('acf_extended__' . $field['type'] . '__format_for_save', $value, $hierarchy);
+                    if (is_array($data)) {
+                        // Merge data we're getting into our $table data group
+                        $values[$table] = array_merge_recursive($values[$table], $data);
+                    } else {
+                        // Get data with our field filter
+                        $values[$table][$hierarchy] = $data;
                     }
-
-                    // Now, transform the values to be handled in a database save
-                    foreach ($repeaterValues as $repeaterKey => $repeaterValue) {
-                       $values[$table][$repeaterKey] = json_encode($repeaterValue);
-                    }
-                } else if ($field['type'] === 'gallery') {
-                    $values[$table][$hierarchy] = (new Gallery())->formatForSave($value);
-                } else if ($field['type'] === 'post_object') {
-                    $values[$table][$hierarchy] = (new PostObject())->formatForSave($value);
                 } else if (is_array($value)) {
                     // If it's an array, we'll need to parse it to determine which type of complex
                     // field we're dealing with
@@ -294,10 +299,17 @@ class HumanoidAcfExtended {
             // Get table name
             $table = ACF::getACFGroupName($field['id']);
             $fieldData = array();
+
             // Parse all sub fields in our repeater and get the value in database
             foreach ($field['sub_fields'] as $row) {
                 $column = $field['name'] . '_' . $row['name'];
                 $json = $this->db->getSingleRowValue($table, $column, $postID);
+
+                if ($json === '') {
+                    $fieldData['row-0'] = array();
+                    continue;
+                }
+
                 $data = json_decode($json, true);
 
                 // Now, build the array like ACF want us to return it and returns it
@@ -369,15 +381,6 @@ class HumanoidAcfExtended {
         return false;
     }
 
-    /**
-     * @param $id
-     * @return string|bool
-     */
-    private function getACFGroupName($id) {
-        $fieldGroup = acf_get_field_group($id);
-        return $fieldGroup['custom_table_name'];
-    }
-
     private function getACFGroupType($id) {
         $field = acf_get_field($id);
 
@@ -428,26 +431,19 @@ class HumanoidAcfExtended {
     }
 
     /**
-     * First version of mapping the field type of acf custom field
-     * with the one we store in our custom tables
-     *
-     * TODO: upgrade with abstract class with one class by ACF Type
+     * Get the SQL type based on Fields class in includes\Core\Fields
+     * Each type of field has it's own data type mapping but if we try to get another one
+     * we could return a boolean (this must not happen in theory)
      *
      * @param $acfType
-     * @return string
+     * @return string|bool
      */
-    private function getTypeFromACFType($acfType): string {
-        switch ($acfType) {
-            case 'number':
-            case 'image':
-                return 'INT';
-            case 'textarea':
-                return 'TEXT';
-            case 'repeater':
-                return 'LONGTEXT';
-            default:
-                return 'VARCHAR(255)';
+    private function getTypeFromACFType($acfType) {
+        $type = apply_filters('acf_extended__' . $acfType . '__sql_type', false);
+        if ($type !== 1) {
+            return $type;
         }
+        return false;
     }
 
     /**

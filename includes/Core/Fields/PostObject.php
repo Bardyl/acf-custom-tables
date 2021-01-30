@@ -5,7 +5,7 @@ namespace AcfExtended\Core\Fields;
 use AcfExtended\Core\Utils\ACF;
 
 class PostObject extends Field {
-    public function formatForSave($value) {
+    public function formatForSave($value, $hierarchy = false) {
         if (is_array($value)) {
             return json_encode($value);
         }

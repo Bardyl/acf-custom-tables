@@ -5,7 +5,9 @@ namespace AcfExtended\Core\Fields;
 use AcfExtended\Core\Utils\ACF;
 
 class Gallery extends Field {
-    public function formatForSave($value) {
+    public String $sqlType = 'varchar(200)';
+
+    public function formatForSave($value, $hierarchy = false) {
         return json_encode($value);
     }
 

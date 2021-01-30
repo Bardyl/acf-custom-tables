@@ -5,8 +5,37 @@ namespace AcfExtended\Core\Fields;
 use AcfExtended\Core\Utils\ACF;
 
 class Repeater extends Field {
-    public function formatForSave($value) {
+    public String $sqlType = 'text';
 
+    public function formatForSave($value, $hierarchy) {
+        // If it's a repeater field, we need to parse it
+        // to get values and place it at right places
+
+        // This will act as a temporary array before we plate it's values
+        $repeaterValues = array();
+        // We parse each row ($i will act as a pointer for the item number
+        $i = 0;
+        foreach ($value as $row) {
+            // And finally, parse every value in each row to get it's value and save it in the right place
+            foreach ($row as $itemKey => $itemValue) {
+                $itemObject = get_field_object($itemKey, false, true, false);
+                $itemName = $itemObject['name'];
+                $repeaterValues[$hierarchy . '_' . $itemName][] = array(
+                    'id' => 'row-' . $i,
+                    'key' => $itemObject['key'],
+                    'name' => $itemObject['name'],
+                    'value' => $itemValue
+                );
+            }
+            $i++;
+        }
+
+        // Now, transform the values to be handled in a database save
+        $repeaterData = array();
+        foreach ($repeaterValues as $repeaterKey => $repeaterValue) {
+            $repeaterData[$repeaterKey] = json_encode($repeaterValue);
+        }
+        return $repeaterData;
     }
 
     public function formatForLoad($field, $postID) {
