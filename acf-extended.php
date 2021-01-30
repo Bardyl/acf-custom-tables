@@ -26,12 +26,40 @@ class HumanoidAcfExtended {
         // Initialize database interface to manage our custom SQL tables
         $this->db = new Database();
 
+        /** ACF group of fields admin page */
+        add_action('acf/field_group/admin_head', array($this, 'addMetaBox'));
         /** Save ACF group of fields */
         add_action('acf/update_field_group', array($this, 'saveAcfGroupFields'));
         /** Save ACF fields */
         add_action('acf/save_post', array($this, 'saveAcfData'), 5);
         /** Load ACF value */
         add_filter('acf/load_value', array($this, 'loadACFValue'), 99, 3);
+    }
+
+    /**
+     * Create a WordPress meta box into ACF single group edit page
+     */
+    public function addMetaBox() {
+        add_meta_box('acf-group-field-table', 'Table MySQL', array($this, 'showMetaBox'), 'acf-field-group');
+    }
+
+    /**
+     * Add an ACF field into $field_group object
+     * to store the database table name for the current group
+     * This field will be available every time we get the object field
+     */
+    public function showMetaBox() {
+        global $field_group;
+
+        acf_render_field_wrap(array(
+            'instructions' => 'Indiquez le nom de la table MySQL dans laquelle sera sauvegardé le contenu de ce groupe de champs.',
+            'label' => 'Nom de la table',
+            'name' => 'custom_table_name',
+            'prefix' => 'acf_field_group', // To return it when getting acf group field under 'custom_table_name'
+            'required' => true,
+            'type' => 'text',
+            'value' => acf_maybe_get($field_group, 'custom_table_name', false),
+        ));
     }
 
     /**
@@ -44,11 +72,14 @@ class HumanoidAcfExtended {
      */
     public function saveAcfGroupFields($group) {
         // Future table name
+        $tableName = $group['custom_table_name'];
+
+        // Group key
         $key = $group['key'];
 
         // the table does not exists, create it with default fields
-        if (!$this->tableExists($key)) {
-            $this->db->createTable($key);
+        if (!$this->tableExists($tableName)) {
+            $this->db->createTable($tableName);
         }
 
         // Update fields individually
@@ -108,6 +139,9 @@ class HumanoidAcfExtended {
         // This is the main info which will drive the way we'll treat the field inside the custom table
         $fieldType = $field['type'];
 
+        // Get default value for each new entry
+        $fieldDefault = $field['default_value'];
+
         // But we have to check if parent is a repeater field
         // Repeater fields contains complex data and can't be handled with simple types
         // We store json in it, and we need place, so use everytime a repeater field
@@ -119,12 +153,12 @@ class HumanoidAcfExtended {
         // Check if custom table has this field
         if (!$this->columnExists($fieldName, $postParentName)) {
             // Field does not exists, create it
-            $this->addNewColumn($fieldName, $fieldType, $postParentName);
+            $this->addNewColumn($fieldName, $fieldType, $fieldDefault, $postParentName);
         }
 
         // Check if column has the good type
-        if (!$this->columnTypeMatches($fieldName, $fieldType, $postParentName)) {
-            $this->updateExistingColumn($fieldName, $fieldType, $postParentName);
+        if (!$this->columnMatches($fieldName, $fieldType, $fieldDefault, $postParentName)) {
+            $this->updateExistingColumn($fieldName, $fieldType, $fieldDefault, $postParentName);
         }
     }
 
@@ -335,6 +369,15 @@ class HumanoidAcfExtended {
         return false;
     }
 
+    /**
+     * @param $id
+     * @return string|bool
+     */
+    private function getACFGroupName($id) {
+        $fieldGroup = acf_get_field_group($id);
+        return $fieldGroup['custom_table_name'];
+    }
+
     private function getACFGroupType($id) {
         $field = acf_get_field($id);
 
@@ -349,11 +392,12 @@ class HumanoidAcfExtended {
      *
      * @param $column
      * @param $type
+     * @param $default
      * @param $table
      */
-    private function addNewColumn($column, $type, $table) {
+    private function addNewColumn($column, $type, $default, $table) {
         $sqlType = $this->getTypeFromACFType($type);
-        $this->db->addColumn($table, $column, $sqlType);
+        $this->db->addColumn($table, $column, $sqlType, $default);
     }
 
     /**
@@ -361,11 +405,12 @@ class HumanoidAcfExtended {
      *
      * @param $column
      * @param $type
+     * @param $default
      * @param $table
      */
-    private function updateExistingColumn($column, $type, $table) {
+    private function updateExistingColumn($column, $type, $default, $table) {
         $sqlType = $this->getTypeFromACFType($type);
-        $this->db->updateColumn($table, $column, $sqlType);
+        $this->db->updateColumn($table, $column, $sqlType, $default);
     }
 
     /**
@@ -411,15 +456,18 @@ class HumanoidAcfExtended {
      *
      * @param $column
      * @param $type
+     * @param $default
      * @param $table
      * @return bool
      */
-    private function columnTypeMatches($column, $type, $table): bool {
+    private function columnMatches($column, $type, $default, $table): bool {
         $sqlType = $this->getTypeFromACFType($type);
-        $sqlExistingType = $this->db->getFields($table, $column);
-        $type = $sqlExistingType[0]['Type'];
 
-        if ($type === strtolower($sqlType)) {
+        $sql = $this->db->getFields($table, $column);
+        $type = $sql[0]['Type'];
+        $sqlDefault = $sql[0]['Default'];
+
+        if ($type === strtolower($sqlType) && $default === strtolower($sqlDefault)) {
             return true;
         }
         return false;

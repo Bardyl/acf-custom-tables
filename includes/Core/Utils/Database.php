@@ -45,11 +45,17 @@ class Database {
      * @param $table
      * @param $column
      * @param $type
+     * @param $default
      */
-    public function addColumn($table, $column, $type) {
+    public function addColumn($table, $column, $type, $default) {
         global $wpdb;
         $table = $wpdb->prefix . $table;
-        $wpdb->query("ALTER TABLE {$table} ADD COLUMN {$column} {$type};");
+        if (!empty($default)) {
+            $wpdb->query("ALTER TABLE {$table} ADD COLUMN {$column} {$type} DEFAULT \"{$default}\";");
+            die();
+        } else {
+            $wpdb->query("ALTER TABLE {$table} ADD COLUMN {$column} {$type};");
+        }
     }
 
     /**
@@ -58,11 +64,16 @@ class Database {
      * @param $table
      * @param $column
      * @param $type
+     * @param $default
      */
-    public function updateColumn($table, $column, $type) {
+    public function updateColumn($table, $column, $type, $default) {
         global $wpdb;
         $table = $wpdb->prefix . $table;
-        $wpdb->query("ALTER TABLE {$table} MODIFY COLUMN {$column} {$type};");
+        if (!empty($default)) {
+            $wpdb->query("ALTER TABLE {$table} MODIFY COLUMN {$column} {$type} DEFAULT \"{$default}\";");
+        } else {
+            $wpdb->query("ALTER TABLE {$table} MODIFY COLUMN {$column} {$type};");
+        }
     }
 
     /**
