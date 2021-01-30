@@ -101,6 +101,9 @@ class HumanoidAcfExtended {
         // This is the main info which will drive the way we'll treat the field inside the custom table
         $fieldType = $field['type'];
 
+        // Get default value for each new entry
+        $fieldDefault = $field['default_value'];
+
         // But we have to check if parent is a repeater field
         // Repeater fields contains complex data and can't be handled with simple types
         // We store json in it, and we need place, so use everytime a repeater field
@@ -112,12 +115,12 @@ class HumanoidAcfExtended {
         // Check if custom table has this field
         if (!$this->columnExists($fieldName, $postParentName)) {
             // Field does not exists, create it
-            $this->addNewColumn($fieldName, $fieldType, $postParentName);
+            $this->addNewColumn($fieldName, $fieldType, $fieldDefault, $postParentName);
         }
 
         // Check if column has the good type
-        if (!$this->columnTypeMatches($fieldName, $fieldType, $postParentName)) {
-            $this->updateExistingColumn($fieldName, $fieldType, $postParentName);
+        if (!$this->columnMatches($fieldName, $fieldType, $fieldDefault, $postParentName)) {
+            $this->updateExistingColumn($fieldName, $fieldType, $fieldDefault, $postParentName);
         }
     }
 
@@ -389,11 +392,12 @@ class HumanoidAcfExtended {
      *
      * @param $column
      * @param $type
+     * @param $default
      * @param $table
      */
-    private function addNewColumn($column, $type, $table) {
+    private function addNewColumn($column, $type, $default, $table) {
         $sqlType = $this->getTypeFromACFType($type);
-        $this->db->addColumn($table, $column, $sqlType);
+        $this->db->addColumn($table, $column, $sqlType, $default);
     }
 
     /**
@@ -401,11 +405,12 @@ class HumanoidAcfExtended {
      *
      * @param $column
      * @param $type
+     * @param $default
      * @param $table
      */
-    private function updateExistingColumn($column, $type, $table) {
+    private function updateExistingColumn($column, $type, $default, $table) {
         $sqlType = $this->getTypeFromACFType($type);
-        $this->db->updateColumn($table, $column, $sqlType);
+        $this->db->updateColumn($table, $column, $sqlType, $default);
     }
 
     /**
@@ -451,15 +456,18 @@ class HumanoidAcfExtended {
      *
      * @param $column
      * @param $type
+     * @param $default
      * @param $table
      * @return bool
      */
-    private function columnTypeMatches($column, $type, $table): bool {
+    private function columnMatches($column, $type, $default, $table): bool {
         $sqlType = $this->getTypeFromACFType($type);
-        $sqlExistingType = $this->db->getFields($table, $column);
-        $type = $sqlExistingType[0]['Type'];
 
-        if ($type === strtolower($sqlType)) {
+        $sql = $this->db->getFields($table, $column);
+        $type = $sql[0]['Type'];
+        $sqlDefault = $sql[0]['Default'];
+
+        if ($type === strtolower($sqlType) && $default === strtolower($sqlDefault)) {
             return true;
         }
         return false;
