@@ -19,6 +19,7 @@ class HumanoidAcfExtended {
         // Initialize database interface to manage our custom SQL tables
         $this->db = new Database();
 
+        /** ACF group of fields admin page */
         add_action('acf/field_group/admin_head', array($this, 'addMetaBox'));
         /** Save ACF group of fields */
         add_action('acf/update_field_group', array($this, 'saveAcfGroupFields'));
@@ -28,10 +29,18 @@ class HumanoidAcfExtended {
         add_filter('acf/load_value', array($this, 'loadACFValue'), 99, 3);
     }
 
+    /**
+     * Create a WordPress meta box into ACF single group edit page
+     */
     public function addMetaBox() {
         add_meta_box('acf-group-field-table', 'Table MySQL', array($this, 'showMetaBox'), 'acf-field-group');
     }
 
+    /**
+     * Add an ACF field into $field_group object
+     * to store the database table name for the current group
+     * This field will be available every time we get the object field
+     */
     public function showMetaBox() {
         global $field_group;
 
@@ -39,7 +48,7 @@ class HumanoidAcfExtended {
             'instructions' => 'Indiquez le nom de la table MySQL dans laquelle sera sauvegardé le contenu de ce groupe de champs.',
             'label' => 'Nom de la table',
             'name' => 'custom_table_name',
-            'prefix' => 'acf_field_group',
+            'prefix' => 'acf_field_group', // To return it when getting acf group field under 'custom_table_name'
             'required' => true,
             'type' => 'text',
             'value' => acf_maybe_get($field_group, 'custom_table_name', false),
