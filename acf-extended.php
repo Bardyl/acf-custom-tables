@@ -19,12 +19,31 @@ class HumanoidAcfExtended {
         // Initialize database interface to manage our custom SQL tables
         $this->db = new Database();
 
+        add_action('acf/field_group/admin_head', array($this, 'addMetaBox'));
         /** Save ACF group of fields */
         add_action('acf/update_field_group', array($this, 'saveAcfGroupFields'));
         /** Save ACF fields */
         add_action('acf/save_post', array($this, 'saveAcfData'), 5);
         /** Load ACF value */
         add_filter('acf/load_value', array($this, 'loadACFValue'), 99, 3);
+    }
+
+    public function addMetaBox() {
+        add_meta_box('acf-group-field-table', 'Table MySQL', array($this, 'showMetaBox'), 'acf-field-group');
+    }
+
+    public function showMetaBox() {
+        global $field_group;
+
+        acf_render_field_wrap(array(
+            'instructions' => 'Indiquez le nom de la table MySQL dans laquelle sera sauvegardé le contenu de ce groupe de champs.',
+            'label' => 'Nom de la table',
+            'name' => 'custom_table_name',
+            'prefix' => 'acf_field_group',
+            'required' => true,
+            'type' => 'text',
+            'value' => acf_maybe_get($field_group, 'custom_table_name', false),
+        ));
     }
 
     /**
@@ -37,11 +56,14 @@ class HumanoidAcfExtended {
      */
     public function saveAcfGroupFields($group) {
         // Future table name
+        $tableName = $group['custom_table_name'];
+
+        // Group key
         $key = $group['key'];
 
         // the table does not exists, create it with default fields
-        if (!$this->tableExists($key)) {
-            $this->db->createTable($key);
+        if (!$this->tableExists($tableName)) {
+            $this->db->createTable($tableName);
         }
 
         // Update fields individually
@@ -367,15 +389,8 @@ class HumanoidAcfExtended {
      * @return string|bool
      */
     private function getACFGroupName($id) {
-        global $wpdb;
         $fieldGroup = acf_get_field_group($id);
-        $fieldId = $fieldGroup['ID'];
-
-        $groupName = $wpdb->get_var("SELECT post_name FROM {$wpdb->posts} WHERE id = {$fieldId};");
-        if ($groupName) {
-            return $groupName;
-        }
-        return false;
+        return $fieldGroup['custom_table_name'];
     }
 
     private function getACFGroupType($id) {

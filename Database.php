@@ -50,9 +50,8 @@ class Database {
     public function addColumn($table, $column, $type, $default) {
         global $wpdb;
         $table = $wpdb->prefix . $table;
-        var_dump(array($table, $column, $type, $default));
         if (!empty($default)) {
-            var_dump($wpdb->query("ALTER TABLE {$table} ADD COLUMN {$column} {$type} DEFAULT \"{$default}\";"));
+            $wpdb->query("ALTER TABLE {$table} ADD COLUMN {$column} {$type} DEFAULT \"{$default}\";");
             die();
         } else {
             $wpdb->query("ALTER TABLE {$table} ADD COLUMN {$column} {$type};");
