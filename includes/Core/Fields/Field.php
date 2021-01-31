@@ -15,6 +15,7 @@ class Field {
 
         add_filter('acf_extended__' . $type . '__sql_type', array($this, 'getSqlType'));
         add_filter('acf_extended__' . $type . '__format_for_save', array($this, 'formatForSave'), 10, 2);
+        add_filter('acf_extended__' . $type . '__format_for_load', array($this, 'formatForLoad'), 10, 3);
     }
 
     public function getSqlType(): String {
@@ -30,5 +31,12 @@ class Field {
         $column = $field['name'];
 
         return $this->db->getSingleRowValue($table, $column, $postID);
+    }
+
+    public function isSpecialField(): bool {
+        if (isset($this->specialField)) {
+            return $this->specialField;
+        }
+        return false;
     }
 }

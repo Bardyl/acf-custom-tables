@@ -8,11 +8,6 @@
 
 namespace AcfExtended;
 
-use AcfExtended\Core\Fields\Field;
-use AcfExtended\Core\Fields\Gallery;
-use AcfExtended\Core\Fields\PostObject;
-use AcfExtended\Core\Fields\Repeater;
-use AcfExtended\Core\Fields\Text;
 use AcfExtended\Core\Utils\ACF;
 use AcfExtended\Core\Utils\Database;
 
@@ -23,6 +18,7 @@ require_once 'vendor/autoload.php';
 class HumanoidAcfExtended {
     private Database $db;
     private array $supportedTypes;
+    private array $specialFields;
 
     public function __construct() {
         // Initialize database interface to manage our custom SQL tables
@@ -52,7 +48,12 @@ class HumanoidAcfExtended {
             $this->supportedTypes[] = strtolower($fileName);
 
             $class = "\\AcfExtended\\Core\\Fields\\" . $fileName;
-            new $class();
+            $fieldClass = new $class();
+
+            // When we load values, some fields lire repeaters needs a special treatment
+            if ($fieldClass->isSpecialField()) {
+                $this->specialFields[] = strtolower($fileName);
+            }
         }
     }
 
@@ -274,52 +275,12 @@ class HumanoidAcfExtended {
      * @return string|array
      */
     public function loadACFValue($value, $postID, $field) {
+        $hasSubFields = isset($field['sub_fields']);
+        $isSpecialField = in_array($field['type'], $this->specialFields);
+
         // If no sub fields, that's easy, simply get the value inside our custom table
-        if (!isset($field['sub_fields'])) {
-            // TODO: clean code
-            // TODO: only work with one level under repeater field
-            // Get parent field to check if it's a repeater field
-            // Only work on one level, be careful
-            $parentField = acf_get_field($field['parent']);
-            if ($parentField && $parentField['type'] === 'repeater') {
-                return (new Repeater())->formatForLoad($field, $postID);
-            } else if ($field['type'] === 'gallery') {
-                return (new Gallery())->formatForLoad($field, $postID);
-            } else if ($field['type'] === 'post_object') {
-                return (new PostObject())->formatForLoad($field, $postID);
-            } else {
-                // Easy way
-                return (new Field())->formatForLoad($field, $postID);
-            }
-        }
-
-        // TODO: clean code
-        // TODO: only work with repeater on one level
-        if ($field['type'] === 'repeater') {
-            // Get table name
-            $table = ACF::getACFGroupName($field['id']);
-            $fieldData = array();
-
-            // Parse all sub fields in our repeater and get the value in database
-            foreach ($field['sub_fields'] as $row) {
-                $column = $field['name'] . '_' . $row['name'];
-                $json = $this->db->getSingleRowValue($table, $column, $postID);
-
-                if ($json === '') {
-                    $fieldData['row-0'] = array();
-                    continue;
-                }
-
-                $data = json_decode($json, true);
-
-                // Now, build the array like ACF want us to return it and returns it
-                $i = 0;
-                foreach ($data as $item) {
-                    $fieldData[$i][$item['key']] = $item['value'];
-                    $i++;
-                }
-            }
-            return $fieldData;
+        if (!$hasSubFields || $isSpecialField) {
+            return apply_filters('acf_extended__' . $field['type'] . '__format_for_load', $field, $postID);
         }
 
         // For fields with sub items, we must render the tree of all contained values with their field tree keys
@@ -440,10 +401,10 @@ class HumanoidAcfExtended {
      */
     private function getTypeFromACFType($acfType) {
         $type = apply_filters('acf_extended__' . $acfType . '__sql_type', false);
-        if ($type !== 1) {
+        if ($type) {
             return $type;
         }
-        return false;
+        return 'text';
     }
 
     /**
