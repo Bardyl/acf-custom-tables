@@ -7,7 +7,8 @@ use AcfExtended\Core\Utils\Database;
 
 class Field {
     public Database $db;
-    public String $sqlType;
+
+    public string $sqlType;
 
     public function __construct() {
         $type = strtolower((new \ReflectionClass($this))->getShortName());
@@ -18,14 +19,27 @@ class Field {
         add_filter('acf_extended__' . $type . '__format_for_load', array($this, 'formatForLoad'), 10, 3);
     }
 
-    public function getSqlType(): String {
+    /**
+     * @return string
+     */
+    public function getSqlType(): string {
         return $this->sqlType;
     }
 
+    /**
+     * @param $value
+     * @param $hierarchy
+     * @return string|array
+     */
     public function formatForSave($value, $hierarchy) {
         return $value;
     }
 
+    /**
+     * @param $field
+     * @param $postID
+     * @return string|array
+     */
     public function formatForLoad($field, $postID) {
         $table = ACF::getACFGroupName($field['id']);
         $column = $field['name'];
@@ -33,6 +47,9 @@ class Field {
         return $this->db->getSingleRowValue($table, $column, $postID);
     }
 
+    /**
+     * @return bool
+     */
     public function isSpecialField(): bool {
         if (isset($this->specialField)) {
             return $this->specialField;

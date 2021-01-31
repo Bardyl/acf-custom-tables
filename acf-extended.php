@@ -18,10 +18,16 @@ require_once 'vendor/autoload.php';
 
 class HumanoidAcfExtended {
     private Database $db;
+
     private array $supportedTypes;
     private array $specialFields;
 
     public function __construct() {
+        // Only necessary in admin
+        if (!is_admin()) {
+            return;
+        }
+
         // Initialize database interface to manage our custom SQL tables
         $this->db = new Database();
 

@@ -9,8 +9,8 @@ namespace AcfExtended\Core\Utils;
  * @package AcfExtended
  */
 class Database {
-    private String $charsetCollate;
-    public String $prefix;
+    private string $charsetCollate;
+    public string $prefix;
 
     public function __construct() {
         global $wpdb;
