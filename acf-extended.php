@@ -25,6 +25,8 @@ class HumanoidAcfExtended {
         // Initialize database interface to manage our custom SQL tables
         $this->db = new Database();
 
+        // Initialize fields types
+        // This function load dynamically all our custom fields class
         $this->initFieldsTypes();
 
         /** ACF group of fields admin page */
@@ -37,21 +39,34 @@ class HumanoidAcfExtended {
         add_filter('acf/load_value', array($this, 'loadACFValue'), 99, 3);
     }
 
+    /**
+     * We need to initialize all of our supported fields class dynamically because of
+     * our namespace way to handle things
+     *
+     * All of our custom classes are named based on ACF class name and extends a default Field class
+     * we initialize to handle a default way to manage fields if a new field is added in the main ACF
+     * plugin
+     */
     private function initFieldsTypes() {
+        // Get all files in Field directory
         $fieldsFiles = scandir(HUMANOID_ACF_EXTENDED_PATH . '/includes/Core/Fields/');
 
         // Init default type
         new Field();
 
         foreach($fieldsFiles as $file) {
+            // Don't want those files
             if (in_array($file, array('.', '..', 'Field.php'))) {
                 continue;
             }
 
+            // Get a list of supported fields (the ones for which we have a class and for which we
+            // can call a Filter function to do things on)
             $fileName = explode('.', $file);
             $fileName = $fileName[0];
             $this->supportedTypes[] = strtolower($fileName);
 
+            // Initialize classes dynamically
             $class = "\\AcfExtended\\Core\\Fields\\" . $fileName;
             $fieldClass = new $class();
 
@@ -110,6 +125,7 @@ class HumanoidAcfExtended {
 
         // Update fields individually
         $fields = acf_get_fields($key);
+
         foreach ($fields as $field) {
             // First, save field…
             $this->saveField($field);
@@ -195,8 +211,6 @@ class HumanoidAcfExtended {
      * Called every time a post is saved to save ACF custom fields not in the post meta table
      * but into our custom tables (one by group of fields)
      *
-     * TODO: make sure data is not also stored in post meta table
-     *
      * @param $postID
      */
     public function saveAcfData($postID) {
@@ -212,7 +226,17 @@ class HumanoidAcfExtended {
         unset($_POST['acf']);
     }
 
-    private function getAcfFieldsValues($fields) {
+    /**
+     * Get ACF fields values based on the $_POST['acf'] model
+     * This is where the magic happen. We have this dedicated function because we need
+     * to handle things recursively. Moreover, based on the type of field, we apply our external
+     * class pattern in Core\Fields directory
+     *
+     * @param $fields
+     * @return array
+     */
+    private function getAcfFieldsValues($fields): array
+    {
         $values = array();
         if (!empty($fields)) {
             foreach ($fields as $key => $value) {
@@ -234,7 +258,9 @@ class HumanoidAcfExtended {
                     $hierarchy = substr($hierarchy, 1);
                 }
 
+                // Check if we're dealing with a supported type
                 if (in_array($field['type'], $this->supportedTypes)) {
+                    // If we are, get well formatted data and handle them differently if it returns an array or a string
                     $data = apply_filters('acf_extended__' . $field['type'] . '__format_for_save', $value, $hierarchy);
                     if (is_array($data)) {
                         // Merge data we're getting into our $table data group
@@ -245,8 +271,7 @@ class HumanoidAcfExtended {
                     }
                 } else if (is_array($value)) {
                     // If it's an array, we'll need to parse it to determine which type of complex
-                    // field we're dealing with
-                    // This is a recursive loop
+                    // field we're dealing with. This is a recursive loop
                     $values = array_merge_recursive($values, $this->getAcfFieldsValues($value));
                 } else {
                     // The easy part is if if it's a value:
@@ -258,7 +283,14 @@ class HumanoidAcfExtended {
         return $values;
     }
 
-    private function getHierarchicalFieldName($field) {
+    /**
+     * To save and load values with the proper format required by ACF plugin
+     * we need to build the correct key, which may contains recursive items
+     *
+     * @param $field
+     * @return string
+     */
+    private function getHierarchicalFieldName($field): string {
         $hierarchy = '';
         if (isset($field['parent'])) {
             $parentField = acf_get_field($field['parent']);
@@ -351,9 +383,14 @@ class HumanoidAcfExtended {
         return false;
     }
 
+    /**
+     * Get ACF group type
+     *
+     * @param $id
+     * @return false|string
+     */
     private function getACFGroupType($id) {
         $field = acf_get_field($id);
-
         if ($field) {
             return $field['type'];
         }
