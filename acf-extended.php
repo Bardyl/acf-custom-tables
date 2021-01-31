@@ -8,6 +8,7 @@
 
 namespace AcfExtended;
 
+use AcfExtended\Core\Fields\Field;
 use AcfExtended\Core\Utils\ACF;
 use AcfExtended\Core\Utils\Database;
 
@@ -38,6 +39,10 @@ class HumanoidAcfExtended {
 
     private function initFieldsTypes() {
         $fieldsFiles = scandir(HUMANOID_ACF_EXTENDED_PATH . '/includes/Core/Fields/');
+
+        // Init default type
+        new Field();
+
         foreach($fieldsFiles as $file) {
             if (in_array($file, array('.', '..', 'Field.php'))) {
                 continue;
@@ -277,10 +282,14 @@ class HumanoidAcfExtended {
     public function loadACFValue($value, $postID, $field) {
         $hasSubFields = isset($field['sub_fields']);
         $isSpecialField = in_array($field['type'], $this->specialFields);
+        $isSupportedField = in_array($field['type'], $this->supportedTypes);
 
         // If no sub fields, that's easy, simply get the value inside our custom table
         if (!$hasSubFields || $isSpecialField) {
-            return apply_filters('acf_extended__' . $field['type'] . '__format_for_load', $field, $postID);
+            if ($isSupportedField) {
+                return apply_filters('acf_extended__' . $field['type'] . '__format_for_load', $field, $postID);
+            }
+            return apply_filters('acf_extended__field__format_for_load', $field, $postID);
         }
 
         // For fields with sub items, we must render the tree of all contained values with their field tree keys
