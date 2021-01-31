@@ -1,6 +1,6 @@
 <?php
 
-namespace AcfExtended;
+namespace AcfExtended\Core\Utils;
 
 /**
  * Interface between our ACF new database scheme implementation and $wpdb
@@ -9,8 +9,8 @@ namespace AcfExtended;
  * @package AcfExtended
  */
 class Database {
-    private String $charsetCollate;
-    public String $prefix;
+    private string $charsetCollate;
+    public string $prefix;
 
     public function __construct() {
         global $wpdb;
