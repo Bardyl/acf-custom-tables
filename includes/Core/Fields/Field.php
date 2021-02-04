@@ -3,7 +3,9 @@
 namespace AcfExtended\Core\Fields;
 
 use AcfExtended\Core\Utils\ACF;
+use AcfExtended\Core\Utils\AcfFields;
 use AcfExtended\Core\Utils\Database;
+use AcfExtended\Core\Utils\FieldsTypes;
 
 class Field {
     public Database $db;
@@ -20,9 +22,13 @@ class Field {
     }
 
     /**
+     * @param $parameters
      * @return string
      */
-    public function getSqlType(): string {
+    public function getSqlType($parameters): string {
+        if ($this->sqlType === 'varchar') {
+            return FieldsTypes::getVarcharField($parameters['maxlength']);
+        }
         return $this->sqlType;
     }
 

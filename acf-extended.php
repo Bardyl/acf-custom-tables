@@ -169,8 +169,11 @@ class HumanoidAcfExtended {
      * @param array $hierarchical
      */
     private function saveField($field, $hierarchical = array()) {
+        // Array of parameters to manage table columns
+        $parameters = array();
+
         // Get post parent name
-        $postParentName = ACF::getACFGroupName($field['id']);
+        $postParentName = ACF::getACFGroupName($field['parent']);
 
         // Be careful, if this is altered, the data could not been mapped
         // A manual migration will be required
@@ -184,32 +187,35 @@ class HumanoidAcfExtended {
             $fieldName = implode('_', $hierarchical) . '_' . $fieldName;
         }
 
-        // This is the main info which will drive the way we'll treat the field inside the custom table
-        $fieldType = $field['type'];
-
         // Get default value for each new entry
-        $fieldDefault = null;
+        $parameters['default'] = null;
         if (isset($field['default_value']) && !empty($field['default_value'])) {
-            $fieldDefault = $field['default_value'];
+            $parameters['default'] = $field['default_value'];
         }
+
+        // This is the main info which will drive the way we'll treat the field inside the custom table
+        $parameters['type'] = $field['type'];
 
         // But we have to check if parent is a repeater field
         // Repeater fields contains complex data and can't be handled with simple types
         // We store json in it, and we need place, so use everytime a repeater field
         $parentFieldType = $this->getACFGroupType($field['parent']);
         if ($parentFieldType === 'repeater') {
-            $fieldType = $parentFieldType;
+            $parameters['type'] = $parentFieldType;
         }
+
+        // Get max length of field to optimize its database storage
+        $parameters['maxlength'] = $field['maxlength'];
 
         // Check if custom table has this field
         if (!$this->columnExists($fieldName, $postParentName)) {
             // Field does not exists, create it
-            $this->addNewColumn($fieldName, $fieldType, $fieldDefault, $postParentName);
+            $this->addNewColumn($fieldName, $parameters, $postParentName);
         }
 
         // Check if column has the good type
-        if (!$this->columnMatches($fieldName, $fieldType, $fieldDefault, $postParentName)) {
-            $this->updateExistingColumn($fieldName, $fieldType, $fieldDefault, $postParentName);
+        if (!$this->columnMatches($fieldName, $parameters, $postParentName)) {
+            $this->updateExistingColumn($fieldName, $parameters, $postParentName);
         }
     }
 
@@ -407,26 +413,24 @@ class HumanoidAcfExtended {
      * Create custom table to handle a new group of ACF fields
      *
      * @param $column
-     * @param $type
-     * @param $default
+     * @param $parameters
      * @param $table
      */
-    private function addNewColumn($column, $type, $default, $table) {
-        $sqlType = $this->getTypeFromACFType($type);
-        $this->db->addColumn($table, $column, $sqlType, $default);
+    private function addNewColumn($column, $parameters, $table) {
+        $sqlType = $this->getTypeFromACFType($parameters);
+        $this->db->addColumn($table, $column, $sqlType, $parameters['default']);
     }
 
     /**
      * Alter specific column to match new ACF fields configuration
      *
      * @param $column
-     * @param $type
-     * @param $default
+     * @param $parameters
      * @param $table
      */
-    private function updateExistingColumn($column, $type, $default, $table) {
-        $sqlType = $this->getTypeFromACFType($type);
-        $this->db->updateColumn($table, $column, $sqlType, $default);
+    private function updateExistingColumn($column, $parameters, $table) {
+        $sqlType = $this->getTypeFromACFType($parameters);
+        $this->db->updateColumn($table, $column, $sqlType, $parameters['default']);
     }
 
     /**
@@ -448,11 +452,11 @@ class HumanoidAcfExtended {
      * Each type of field has it's own data type mapping but if we try to get another one
      * we could return a boolean (this must not happen in theory)
      *
-     * @param $acfType
+     * @param $parameters
      * @return string|bool
      */
-    private function getTypeFromACFType($acfType) {
-        $type = apply_filters('acf_extended__' . $acfType . '__sql_type', false);
+    private function getTypeFromACFType($parameters) {
+        $type = apply_filters('acf_extended__' . $parameters['type'] . '__sql_type', $parameters);
         if ($type) {
             return $type;
         }
@@ -460,23 +464,22 @@ class HumanoidAcfExtended {
     }
 
     /**
-     * Check if the SQL field type is matching with the one given by ACF
-     * (with our mapping translation in getTypeFromACFType function
+     * Check if the SQL field is matching with the one given by ACF
+     * We're checking the default value and the type of the field
      *
      * @param $column
-     * @param $type
-     * @param $default
+     * @param $parameters
      * @param $table
      * @return bool
      */
-    private function columnMatches($column, $type, $default, $table): bool {
-        $sqlType = $this->getTypeFromACFType($type);
+    private function columnMatches($column, $parameters, $table): bool {
+        $sqlType = $this->getTypeFromACFType($parameters);
 
         $sql = $this->db->getFields($table, $column);
         $type = $sql[0]['Type'];
         $sqlDefault = $sql[0]['Default'];
 
-        if ($type === strtolower($sqlType) && $default === strtolower($sqlDefault)) {
+        if ($type === strtolower($sqlType) && $parameters['default'] === strtolower($sqlDefault)) {
             return true;
         }
         return false;
