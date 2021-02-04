@@ -52,7 +52,6 @@ class Database {
         $table = $wpdb->prefix . $table;
         if (!empty($default)) {
             $wpdb->query("ALTER TABLE {$table} ADD COLUMN {$column} {$type} DEFAULT \"{$default}\";");
-            die();
         } else {
             $wpdb->query("ALTER TABLE {$table} ADD COLUMN {$column} {$type};");
         }
