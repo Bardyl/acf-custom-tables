@@ -205,7 +205,10 @@ class HumanoidAcfExtended {
         }
 
         // Get max length of field to optimize its database storage
-        $parameters['maxlength'] = $field['maxlength'];
+        $parameters['maxlength'] = 0;
+        if (isset($field['maxlength'])) {
+            $parameters['maxlength'] = $field['maxlength'];
+        }
 
         // Check if custom table has this field
         if (!$this->columnExists($fieldName, $postParentName)) {
