@@ -6,7 +6,7 @@ This plugin is a work in progress. Don't use it in a prod environment for now. N
 
 ## 📚 Definition
 
-It provides another way to handle all [Advanced Custom Fields](http://advancedcustomfields.com) (basic and pro) in custom tables.
+It provides another way to handle all [Advanced Custom Fields](http://advancedcustomfields.com) (basic and pro) in custom MySQL tables.
 
 ## ☕️ Context
 
@@ -17,12 +17,15 @@ In fact, some plugins already exists to make what we want to achieve with this p
 ## 🚧 Progress
 
 For now, it supports:
- - All basic fields (which only register text or single values). Only the text field is managed perfectly, but others will come in a few days
- - Group field (with recursive sub-fields)
- - Repeater field containing only basic fields (which store a single value), not recursively
- 
+ - ✅ All basic fields (full support): text, textarea, number, range, email, url, password
+ - ✅ All content fields (full support): image, file, wysiwyg, oembed, gallery
+ - ✅ Group field (with recursive sub-fields)
+ - Repeater field containing only basic fields (which store a single value), not recursively  
+
+For fields marked as fully supported, the MySQL data type is optimized based on the field parameter.
+
 ## 💯 Next steps
 
 The first goal is to manage all fields, recursively, no matter how they are built.
 
-More to core, but feel free to add issues with examples of what you need.
+More to come, but feel free to add issues with examples of what you need.
