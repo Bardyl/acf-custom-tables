@@ -3,7 +3,6 @@
 namespace AcfExtended\Core\Fields;
 
 use AcfExtended\Core\Utils\ACF;
-use AcfExtended\Core\Utils\AcfFields;
 use AcfExtended\Core\Utils\Database;
 use AcfExtended\Core\Utils\FieldsTypes;
 
